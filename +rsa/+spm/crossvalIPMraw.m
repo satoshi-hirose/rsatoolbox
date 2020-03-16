@@ -124,10 +124,50 @@ end;
 end
 
 % Local function to get cross-validated distance
-function IPM = getCVIPM(nonInterest,partN,partT,Z,X,KWY,numVox,partition)
+% function IPM = getCVIPM(nonInterest,partN,partT,Z,X,KWY,numVox,partition)
+%     nPartition = length(partition);
+%     A = zeros(length(nonInterest(partN==partN(1))),numVox,nPartition);
+%     for p=1:nPartition
+%         % Get the betas from the test run
+%         indxN = partN==partition(p);
+%         indxT = partT==partition(p);
+%         Za = Z(indxN,:);
+%         Za = Za(:,any(Za,1));
+%         Xa = X(indxT,indxN);
+%         Ma  = Xa*Za;
+%         A(:,:,p)     = (Ma'*Ma)\(Ma'*KWY(indxT,:));
+%         
+%         % Get the betas based on the other runs
+%         indxN = partN~=partition(p);
+%         indxT = partT~=partition(p);
+%         Zb    = Z(indxN,:);
+%         Zb    = Zb(:,any(Zb,1));
+%         Xb    = X(indxT,indxN);
+%         Mb    = Xb*Zb;
+%         B     = (Mb'*Mb)\Mb'*KWY(indxT,:);
+%         
+%         % Pick condition of interest
+%         interest = ~nonInterest(partN==partition(p));
+%         IPM(:,:,p) = A(interest,:,p)*B(interest,:)'/numVox;        
+%     end;
+%     IPM = mean(IPM,3);
+%     IPM = 0.5*(IPM+IPM');
+% end
+
+        % Modified by SH 
+        % avoid error when there's lack of condition
+        % e.g. no 'middle finger' condition in some session
+        % Each condition sould be included in at least two sessions
+function IPM = getCVIPM(conditionVec,partN,partT,Z,X,KWY,numVox,partition)
+nonInterest = ~conditionVec; %SH--- make original condition Vec
     nPartition = length(partition);
-    A = zeros(length(nonInterest(partN==partN(1))),numVox,nPartition);
+    nCondInt = sum(unique(conditionVec)~=0); %SH--- Number of interest conditions
+    nCondNonInt = sum(nonInterest)/nPartition;%SH--- Number of non-interest conditions
+    nCond = nCondInt+nCondNonInt;%SH--- Number of  conditions
+    
+    A = NaN(nCond,numVox,nPartition); %SH change to NaN matrix
     for p=1:nPartition
+       
         % Get the betas from the test run
         indxN = partN==partition(p);
         indxT = partT==partition(p);
@@ -135,7 +175,14 @@ function IPM = getCVIPM(nonInterest,partN,partT,Z,X,KWY,numVox,partition)
         Za = Za(:,any(Za,1));
         Xa = X(indxT,indxN);
         Ma  = Xa*Za;
-        A(:,:,p)     = (Ma'*Ma)\(Ma'*KWY(indxT,:));
+        KWYa = KWY(indxT,:);
+        condVeca = conditionVec(indxN); %SH added
+        condVeca(condVeca==0) = (1:nCondNonInt)+nCondInt; %SH added
+        
+        A(condVeca,:,p)     = (Ma'*Ma)\(Ma'*KWY(indxT,:)); % SH
+%        A(:,:,p)     = (Ma'*Ma)\(Ma'*KWY(indxT,:));
+
+
         
         % Get the betas based on the other runs
         indxN = partN~=partition(p);
@@ -147,9 +194,13 @@ function IPM = getCVIPM(nonInterest,partN,partT,Z,X,KWY,numVox,partition)
         B     = (Mb'*Mb)\Mb'*KWY(indxT,:);
         
         % Pick condition of interest
-        interest = ~nonInterest(partN==partition(p));
+%        interest = ~nonInterest(partN==partition(p));
+        interest = 1:nCondInt; %SH
         IPM(:,:,p) = A(interest,:,p)*B(interest,:)'/numVox;        
+
+
     end;
-    IPM = mean(IPM,3);
+%    IPM = mean(IPM,3);
+    IPM = nanmean(IPM,3); %SH
     IPM = 0.5*(IPM+IPM');
 end
